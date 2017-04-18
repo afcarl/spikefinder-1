@@ -126,5 +126,5 @@ def pool1d(x, length=4):
 
 model.compile(loss=pearson_corr,optimizer='adam')
 #model.fit(data_train,spikes_train_padded, epochs=150, batch_size=5, validation_split=0.2)
-model.fit([calcium_train_padded,ids_onehot],spikes_train_padded, epochs=150, batch_size=5, validation_split=0.2,sample_weight=sample_weight)
+model.fit([calcium_train_padded,ids_onehot],spikes_train_padded, epochs=500, batch_size=5, validation_split=0.2,sample_weight=sample_weight)
 model.save_weights('convnet_mini')
