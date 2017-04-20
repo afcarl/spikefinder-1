@@ -131,6 +131,6 @@ pred_train = model.predict([calcium_train_padded,ids_onehot])
 pred_test = model.predict([calcium_test_padded,ids_onehot_test])
 
 for dataset in range(10):
-    pd.DataFrame(pred_train[ids_stacked == dataset,:calcium_train[dataset].shape[0]].squeeze().T).to_csv('out_convnet/'+str(dataset+1)+'.train.spikes.csv',sep=',',index=False)
+    pd.DataFrame(pred_train[ids_stacked == dataset,:calcium_train[dataset].shape[0]].squeeze().T).to_csv('out_spikenet-3/'+str(dataset+1)+'.train.spikes.csv',sep=',',index=False)
     if dataset < 5:
-        pd.DataFrame(pred_test[ids_test_stacked == dataset,:calcium_test[dataset].shape[0]].squeeze().T).to_csv('out_convnet/'+str(dataset+1)+'.test.spikes.csv',sep=',',index=False)
+        pd.DataFrame(pred_test[ids_test_stacked == dataset,:calcium_test[dataset].shape[0]].squeeze().T).to_csv('out_spikenet-3/'+str(dataset+1)+'.test.spikes.csv',sep=',',index=False)
