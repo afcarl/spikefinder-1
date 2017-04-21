@@ -33,12 +33,12 @@ def load_data():
         ids.append(np.array([dataset]*calcium_train[-1].shape[1]))
 
     maxlen = max([c.shape[0] for c in calcium_train])
-    calcium_train_padded = np.hstack([np.pad(c,((0,maxlen-c.shape[0]),(0,0)),'constant',constant_values=np.nan) for c in calcium_train])
-    spikes_train_padded = np.hstack([np.pad(c,((0,maxlen-c.shape[0]),(0,0)),'constant',constant_values=np.nan) for c in spikes_train])
+    calcium_train_padded = np.hstack(
+        [np.pad(c,((0,maxlen-c.shape[0]),(0,0)),'constant',constant_values=np.nan) for c in calcium_train])
+    spikes_train_padded = np.hstack(
+        [np.pad(c,((0,maxlen-c.shape[0]),(0,0)),'constant',constant_values=np.nan) for c in spikes_train])
 
     ids_stacked = np.hstack(ids)
-    for i,n in enumerate(ids_stacked):
-        print i,n
 
     sample_weight = 1.+1.5*(ids_stacked<5)
     sample_weight /= sample_weight.mean()
@@ -124,8 +124,7 @@ def objective(params):
               batch_size=5,
               sample_weight=sample_weight[train_ids],
              validation_data = (
-                 [calcium_train_padded[test_ids],ids_onehot[test_ids]],spikes_train_padded[test_ids]),
-              verbose=False)
+                 [calcium_train_padded[test_ids],ids_onehot[test_ids]],spikes_train_padded[test_ids]))
     #model.save_weights('convnet')
     return ret.history['val_loss'][-1] 
 
