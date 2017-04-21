@@ -9,84 +9,77 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-calcium_train = []
-spikes_train = []
-ids = []
-
-for dataset in range(10):
-    calcium_train.append(np.array(pd.read_csv('spikefinder.train/'+str(dataset+1) + '.train.calcium.csv')))
-    spikes_train.append(np.array(pd.read_csv('spikefinder.train/'+str(dataset+1) + '.train.spikes.csv')))
-    ids.append(np.array([dataset]*calcium_train[-1].shape[1]))
-
-maxlen = max([c.shape[0] for c in calcium_train])
-calcium_train_padded = np.hstack([np.pad(c,((0,maxlen-c.shape[0]),(0,0)),'constant',constant_values=np.nan) for c in calcium_train])
-spikes_train_padded = np.hstack([np.pad(c,((0,maxlen-c.shape[0]),(0,0)),'constant',constant_values=np.nan) for c in spikes_train])
-ids_stacked = np.hstack(ids)
-sample_weight = 1.+1.5*(ids_stacked<5)
-sample_weight /= sample_weight.mean()
-calcium_train_padded[spikes_train_padded<-1] = np.nan
-spikes_train_padded[spikes_train_padded<-1] = np.nan
-
-calcium_train_padded[np.isnan(calcium_train_padded)] = 0.
-spikes_train_padded[np.isnan(spikes_train_padded)] = -1.
-
-calcium_train_padded = calcium_train_padded.T[:,:,np.newaxis]
-spikes_train_padded = spikes_train_padded.T[:,:,np.newaxis]
-
-ids_onehot = np.zeros((calcium_train_padded.shape[0],calcium_train_padded.shape[1],10))
-for n,i in enumerate(ids_stacked):
-    ids_onehot[n,:,i] = 1.
-data_train = np.concatenate((calcium_train_padded,ids_onehot),2)
-
 from keras.models import Sequential, Model
+from keras.layers.pooling import AveragePooling1D
 from keras.layers.core import Masking
 from keras.layers.merge import Concatenate
 from keras.layers import Dense, Activation, Dropout, Input
 from keras.layers.convolutional import Conv1D
 from keras.layers.normalization import BatchNormalization
+from keras.callbacks import EarlyStopping
 
 from keras import backend as K
 import tensorflow as tf
 
+import simple_spearmint
 
-main_input = Input(shape=(None,1), name='main_input')
-dataset_input = Input(shape=(None,10), name='dataset_input')
-x = Conv1D(10,300,padding='same',input_shape=(None,1))(main_input)
-x = Activation('tanh')(x)
-x = Dropout(0.1)(x)
-x = Conv1D(5,10,padding='same')(x)
-x = Activation('relu')(x)
-x = Concatenate()([x,dataset_input])
-x = Dropout(0.1)(x)
-x = Conv1D(10,1,padding='same')(x)
-x = Activation('relu')(x)
-x = Dropout(0.1)(x)
-x = Conv1D(10,5,padding='same')(x)
-x = Activation('relu')(x)
-x = Dropout(0.1)(x)
-x = Conv1D(10,5,padding='same')(x)
-x = Activation('relu')(x)
-x = Dropout(0.1)(x)
-x = Conv1D(1,5,padding='same')(x)
-output = Activation('sigmoid')(x)
+def load_data():
+    calcium_train = []
+    spikes_train = []
+    ids = []
+    for dataset in range(10):
+        calcium_train.append(np.array(pd.read_csv('spikefinder.train/'+str(dataset+1) + '.train.calcium.csv')))
+        spikes_train.append(np.array(pd.read_csv('spikefinder.train/'+str(dataset+1) + '.train.spikes.csv')))
+        ids.append(np.array([dataset]*calcium_train[-1].shape[1]))
 
-model = Model(inputs=[main_input,dataset_input],outputs=output)
+    maxlen = max([c.shape[0] for c in calcium_train])
+    calcium_train_padded = np.hstack([np.pad(c,((0,maxlen-c.shape[0]),(0,0)),'constant',constant_values=np.nan) for c in calcium_train])
+    spikes_train_padded = np.hstack([np.pad(c,((0,maxlen-c.shape[0]),(0,0)),'constant',constant_values=np.nan) for c in spikes_train])
 
-#model = Sequential()
-#model.add(Conv1D(10,300,padding='same',input_shape=(None,1)))
-#model.add(Activation('tanh'))
-#model.add(Dropout(0.1))
-#model.add(Conv1D(10,30,padding='same'))
-#model.add(Activation('relu'))
-#model.add(Dropout(0.1))
-#model.add(Conv1D(10,30,padding='same'))
-#model.add(Activation('tanh'))
-#model.add(Dropout(0.1))
-#model.add(Conv1D(10,30,padding='same'))
-#model.add(Activation('tanh'))
-#model.add(Dropout(0.1))
-#model.add(Conv1D(1,30,padding='same'))
-#model.add(Activation('sigmoid'))
+    ids_stacked = np.hstack(ids)
+    for i,n in enumerate(ids_stacked):
+        print i,n
+
+    sample_weight = 1.+1.5*(ids_stacked<5)
+    sample_weight /= sample_weight.mean()
+
+    calcium_train_padded[spikes_train_padded<-1] = np.nan
+    spikes_train_padded[spikes_train_padded<-1] = np.nan
+    calcium_train_padded[np.isnan(calcium_train_padded)] = 0.
+    spikes_train_padded[np.isnan(spikes_train_padded)] = -1.
+
+    calcium_train_padded = calcium_train_padded.T[:,:,np.newaxis]
+    spikes_train_padded = spikes_train_padded.T[:,:,np.newaxis]
+
+    ids_onehot = np.zeros((calcium_train_padded.shape[0],calcium_train_padded.shape[1],10))
+    for n,i in enumerate(ids_stacked):
+        ids_onehot[n,:,i] = 1.
+
+    return calcium_train_padded,spikes_train_padded,ids_onehot, sample_weight
+
+def build_model(params):
+    main_input = Input(shape=(None,1), name='main_input')
+    dataset_input = Input(shape=(None,10), name='dataset_input')
+    x = Conv1D(10,params['input_width'],padding='same',input_shape=(None,1))(main_input)
+    x = Activation(params['hidden_function'])(x)
+    x = Dropout(params['p_dropout'])(x)
+    x = Conv1D(10,params['hidden_width'],padding='same')(x)
+    x = Activation(params['hidden_function'])(x)
+    x = Concatenate()([x,dataset_input])
+    x = Dropout(params['p_dropout'])(x)
+    x = Conv1D(10,1,padding='same')(x)
+    x = Activation(params['hidden_function'])(x)
+    x = Dropout(params['p_dropout'])(x)
+    x = Conv1D(10,params['hidden_width'],padding='same')(x)
+    x = Activation(params['hidden_function'])(x)
+    x = Dropout(params['p_dropout'])(x)
+    x = Conv1D(10,params['hidden_width'],padding='same')(x)
+    x = Activation(params['hidden_function'])(x)
+    x = Dropout(params['p_dropout'])(x)
+    x = Conv1D(1,params['hidden_width'],padding='same')(x)
+    output = Activation('sigmoid')(x)
+
+    return Model(inputs=[main_input,dataset_input],outputs=output)
 
 def pearson_corr(y_true, y_pred,
         pool=True):
@@ -97,8 +90,8 @@ def pearson_corr(y_true, y_pred,
     """
 
     if pool:
-        y_true = pool1d(y_true, length=4)
-        y_pred = pool1d(y_pred, length=4)
+        y_true = 4.*AveragePooling1D(pool_size=4)(y_true)
+        y_pred = 4.*AveragePooling1D(pool_size=4)(y_pred)
 
     mask = tf.to_float(y_true>=0.)
     samples = K.sum(mask,axis=1,keepdims=True)
@@ -112,25 +105,61 @@ def pearson_corr(y_true, y_pred,
 
     return 1.-K.mean(n / (K.sqrt(d) + 1e-12))
 
-def pool1d(x, length=4):
-    """Adds groups of `length` over the time dimension in x.
-    Args:
-        x: 3D Tensor with shape (batch_size, time_dim, feature_dim).
-        length: the pool length.
-    Returns:
-        3D Tensor with shape (batch_size, time_dim // length, feature_dim).
-    """
 
-    x = tf.expand_dims(x, -1)  # Add "channel" dimension.
-    avg_pool = tf.nn.avg_pool(x,
-        ksize=(1, length, 1, 1),
-        strides=(1, length, 1, 1),
-        padding='SAME')
-    x = tf.squeeze(avg_pool, axis=-1)
+calcium_train_padded,spikes_train_padded,ids_onehot, sample_weight = load_data()
 
-    return x * length
 
-model.compile(loss=pearson_corr,optimizer='adam')
-#model.fit(data_train,spikes_train_padded, epochs=150, batch_size=5, validation_split=0.2)
-model.fit([calcium_train_padded,ids_onehot],spikes_train_padded, epochs=150, batch_size=5, validation_split=0.1,sample_weight=sample_weight)
-model.save_weights('convnet')
+def objective(params):
+    test_chunks = [0,11,32,45,51,60]
+    test_ids = [np.random.randint(test_chunks[i],test_chunks[i+1]) for i in range(5)]
+    train_ids = range(ids_onehot.shape[0])
+    for i in test_ids:
+        train_ids.remove(i)
+    model = build_model(params)
+    model.compile(loss=pearson_corr,optimizer='adam')
+    ret = model.fit([calcium_train_padded[train_ids],ids_onehot[train_ids]],
+              spikes_train_padded[train_ids],
+              epochs=300,
+              callbacks=[EarlyStopping(patience=10)],
+              batch_size=5,
+              sample_weight=sample_weight[train_ids],
+             validation_data = (
+                 [calcium_train_padded[test_ids],ids_onehot[test_ids]],spikes_train_padded[test_ids]),
+              verbose=False)
+    #model.save_weights('convnet')
+    return ret.history['val_loss'][-1] 
+
+# Define a parameter space
+# Supported parameter types are 'int', 'float', and 'enum'
+parameter_space = {'p_dropout': {'type': 'float', 'min': 0., 'max': 0.5},
+                   'hidden_width': {'type': 'int', 'min': 2, 'max': 50},
+                   'input_width': {'type': 'int', 'min': 100, 'max': 500},
+                   'hidden_function': {'type': 'enum', 'options': ['relu', 'tanh']}}
+# Create an optimizer
+ss = simple_spearmint.SimpleSpearmint(parameter_space)
+
+# Seed with 5 randomly chosen parameter settings
+# (this step is optional, but can be beneficial)
+for n in xrange(5):
+    # Get random parameter settings
+    suggestion = ss.suggest_random()
+    # Retrieve an objective value for these parameters
+    value = objective(suggestion)
+    print "Random trial {}: {} -> {}".format(n + 1, suggestion, value)
+    # Update the optimizer on the result
+    ss.update(suggestion, value)
+
+# Run for 100 hyperparameter optimization trials
+for n in xrange(100):
+    # Get a suggestion from the optimizer
+    suggestion = ss.suggest()
+    # Get an objective value; the ** syntax is equivalent to
+    # the call to objective above
+    value = objective(suggestion)
+    print "GP trial {}: {} -> {}".format(n + 1, suggestion, value)
+    # Update the optimizer on the result
+    ss.update(suggestion, value)
+    best_parameters, best_objective = ss.get_best_parameters()
+    print "Best parameters {} for objective {}".format(
+    best_parameters, best_objective)
+
