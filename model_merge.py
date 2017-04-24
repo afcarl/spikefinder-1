@@ -10,10 +10,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from keras.models import Sequential, Model
+from keras.layers.wrappers import Bidirectional
 from keras.layers.pooling import AveragePooling1D
 from keras.layers.core import Masking
 from keras.layers.merge import Concatenate
-from keras.layers import Dense, Activation, Dropout, Input
+from keras.layers import Dense, Activation, Dropout, Input, LSTM
 from keras.layers.convolutional import Conv1D
 from keras.layers.normalization import BatchNormalization
 from keras.callbacks import EarlyStopping
@@ -62,13 +63,15 @@ def build_model(params):
     dataset_input = Input(shape=(None,10), name='dataset_input')
     x = Conv1D(10,params['input_width'],padding='same',input_shape=(None,1))(main_input)
     x = Activation(params['hidden_function'])(x)
-    x = Dropout(params['p_dropout'])(x)
+    #x = Dropout(params['p_dropout'])(x)
     x = Conv1D(10,params['hidden_width'],padding='same')(x)
     x = Activation(params['hidden_function'])(x)
-    x = Concatenate()([x,dataset_input])
-    x = Dropout(params['p_dropout'])(x)
-    x = Conv1D(10,1,padding='same')(x)
-    x = Activation(params['hidden_function'])(x)
+    x = Bidirectional(LSTM(10, return_sequences=True), merge_mode='concat', weights=None)(x)
+
+    #x = Concatenate()([x,dataset_input])
+    #x = Dropout(params['p_dropout'])(x)
+    #x = Conv1D(10,1,padding='same')(x)
+    #x = Activation(params['hidden_function'])(x)
     x = Dropout(params['p_dropout'])(x)
     x = Conv1D(10,params['hidden_width'],padding='same')(x)
     x = Activation(params['hidden_function'])(x)
@@ -110,8 +113,9 @@ calcium_train_padded,spikes_train_padded,ids_onehot, sample_weight = load_data()
 
 
 def objective(params):
-    test_chunks = [0,11,32,45,51,60]
-    test_ids = [np.random.randint(test_chunks[i],test_chunks[i+1]) for i in range(5)]
+    #test_chunks = [0,11,32,45,51,60]
+    #test_ids = [np.random.randint(test_chunks[i],test_chunks[i+1]) for i in range(5)]
+    test_ids = np.random.choice(range(60),12,replace=False)
     train_ids = range(ids_onehot.shape[0])
     for i in test_ids:
         train_ids.remove(i)
@@ -158,7 +162,9 @@ for n in xrange(100):
     print "GP trial {}: {} -> {}".format(n + 1, suggestion, value)
     # Update the optimizer on the result
     ss.update(suggestion, value)
-    best_parameters, best_objective = ss.get_best_parameters()
-    print "Best parameters {} for objective {}".format(
-    best_parameters, best_objective)
+    #best_parameters, best_objective = ss.get_best_parameters()
+    #print "Best parameters {} for objective {}".format(
+    #best_parameters, best_objective)
+    ss.chooser.best()
+
 
