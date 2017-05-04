@@ -124,7 +124,7 @@ def objective(params):
     ret = model.fit([calcium_train_padded[train_ids],ids_onehot[train_ids]],
               spikes_train_padded[train_ids],
               epochs=300,
-              callbacks=[EarlyStopping(patience=10)],
+              #callbacks=[EarlyStopping(patience=10)],
               batch_size=5,
               sample_weight=sample_weight[train_ids],
              validation_data = (
